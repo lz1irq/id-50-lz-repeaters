@@ -84,8 +84,8 @@ def main():
             tone_freq = f"{tone_freq}Hz"
             tone = "TSQL"
         if "dstar" in rep_modes:
-            callsign = dstar_callsign(callsign, dstar_freq_suffix(data["tx"]))
             gw_callsign = dstar_callsign(callsign, "G")
+            callsign = dstar_callsign(callsign, dstar_freq_suffix(data["tx"]))
             mode = "DV"
             rpt1use = "YES"
         
