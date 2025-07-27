@@ -1,5 +1,6 @@
 #!/usr/bin/env python3
 
+import dataclasses
 import json
 import pathlib
 import re
@@ -44,6 +45,27 @@ BG_LAT_MAP = {
         'Я': 'YA',
     }
 
+
+@dataclasses.dataclass
+class RepeaterData:
+
+    name: str
+    subname: str
+    callsign: str
+    gw_callsign: str
+    rx_freq: float
+    shift_dir: str
+    shift_freq: float
+    mode: str
+    tone_use: str
+    tone_freq: str
+    rpt1use: str
+    location: str
+    latitude: float
+    longitude: float
+    utc_offset: str
+
+
 def dstar_freq_suffix(freq: float) -> str:
     if 1240 <= freq <= 1300:
         return "A"
@@ -66,11 +88,12 @@ def transliterate(text: str) -> str:
     text = re.sub(r'ИЯ', 'IA', text.upper())
     return ''.join(BG_LAT_MAP.get(char, char) for char in text)
 
-def main():
-    with open("reps.json", "r", encoding="UTF-8") as reps_file:
+def parse_json_repeaters(path: str) -> list[RepeaterData]:
+    """Parse JSON repeater data into objects."""
+    with open(path, "r", encoding="UTF-8") as reps_file:
         repeaters = json.load(reps_file)
+    output = []
 
-    print(CSV_HEADER)
     for name, data in repeaters["repeaters"].items():
         callsign = data["callsign"]
         rep_modes = list(data["mode"].keys())
@@ -78,26 +101,47 @@ def main():
             continue
         mode = "FM"
         gw_callsign = ""
-        rpt1use = "NO"
-        tone = "OFF"
         if tone_freq := data.get("tone", ""):
             tone_freq = f"{tone_freq}Hz"
-            tone = "TSQL"
         if "dstar" in rep_modes:
             gw_callsign = dstar_callsign(callsign, "G")
             callsign = dstar_callsign(callsign, dstar_freq_suffix(data["tx"]))
             mode = "DV"
-            rpt1use = "YES"
-        
-        tx_freq = data["tx"]
-        rx_freq = data["rx"]
-        shift_dir = "DUP-" if rx_freq > tx_freq else "DUP+"
-        shift_freq = abs(tx_freq - rx_freq)
-        subname = transliterate(data['loc'])
+
+        output.append(
+            RepeaterData(
+                name=name,
+                subname=transliterate(data['loc']),
+                callsign=callsign,
+                gw_callsign=gw_callsign,
+                rx_freq=data["rx"],
+                shift_dir="DUP-" if data["rx"] >  data["tx"] else "DUP+",
+                shift_freq=abs(data["tx"] - data["rx"]),
+                mode=mode,
+                tone_use="TSQL" if tone_freq else "OFF",
+                tone_freq=tone_freq,
+                rpt1use="YES" if "dstar" in rep_modes else "NO",
+                location="Approximate",
+                latitude=data['lat'],
+                longitude=data['lon'],
+                utc_offset="+3:00",
+            )
+        )
+    return output
+
+
+def main():
+    repeaters = sorted(
+        parse_json_repeaters("reps.json"),
+        key=lambda repeater: repeater.name
+    )
+
+    print(CSV_HEADER)
+    for rep in repeaters:
         print(
-            f"1,LZ,{name},{subname},{callsign},{gw_callsign},{rx_freq},"
-            f"{shift_dir},{shift_freq:.6f},{mode},{tone},{tone_freq},"
-            f"{rpt1use},Approximate,{data['lat']},{data['lon']},+3:00"
+            f"1,LZ,{rep.name},{rep.subname},{rep.callsign},{rep.gw_callsign},{rep.rx_freq},"
+            f"{rep.shift_dir},{rep.shift_freq:.6f},{rep.mode},{rep.tone_use},{rep.tone_freq},"
+            f"{rep.rpt1use},Approximate,{rep.latitude},{rep.longitude},+3:00"
         )
 
 if __name__ == "__main__":
