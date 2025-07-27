@@ -1,53 +1,66 @@
 #!/usr/bin/env python3
 
+"""
+Convert LZ repeaters JSON data into a CSV suitable for Icom ID-50.
+"""
+
 import dataclasses
 import json
-import pathlib
 import re
 
-#Group No	Group Name	Name	Sub Name	Repeater Call Sign	Gateway Call Sign	Frequency	Dup	Offset	Mode	TONE	Repeater Tone	RPT1USE	Position	Latitude	Longitude	UTC Offset
-#1	Africa	Pretoria	S-Africa	ZS6PTA C	ZS6PTA G	145.712500	DUP-	0.600000	DV	OFF	88.5Hz	YES	Approximate	-25.692333	28.242333	+2:00
+# Output example, split up for readability
+# Group No	Group Name	Name	    Sub Name	Repeater Call Sign
+# 1	        Africa	    Pretoria	S-Africa	ZS6PTA C
+# Gateway Call Sign	Frequency	Dup	    Offset	    Mode	TONE	Repeater Tone
+# ZS6PTA G	        145.712500	DUP-	0.600000	DV	    TSQL	88.5Hz	 YES
+# RPT1USE	Position	 Latitude	  Longitude	  UTC Offset
+# YES       Approximate	 -25.692333	  28.242333	  +2:00
 
-CSV_HEADER = "Group No,Group Name,Name,Sub Name,Repeater Call Sign,Gateway Call Sign,Frequency,Dup,Offset,Mode,TONE,Repeater Tone,RPT1USE,Position,Latitude,Longitude,UTC Offset"
-
+CSV_HEADER = (
+    "Group No,Group Name,Name,Sub Name,Repeater Call Sign,Gateway Call Sign,"
+    "Frequency,Dup,Offset,Mode,TONE,Repeater Tone,RPT1USE,Position,"
+    "Latitude,Longitude,UTC Offset"
+)
 SELECT_MODES = ["analog", "dstar"]
 
 BG_LAT_MAP = {
-        'А': 'A',
-        'Б': 'B',
-        'В': 'V',
-        'Г': 'G',
-        'Д': 'D',
-        'Е': 'E',
-        'Ж': 'ZH',
-        'З': 'Z',
-        'И': 'I',
-        'Й': 'Y',
-        'К': 'K',
-        'Л': 'L',
-        'М': 'M',
-        'Н': 'N',
-        'О': 'O',
-        'П': 'P',
-        'Р': 'R',
-        'С': 'S',
-        'Т': 'T',
-        'У': 'U',
-        'Ф': 'F',
-        'Х': 'H',
-        'Ц': 'TS',
-        'Ч': 'CH',
-        'Ш': 'SH',
-        'Щ': 'SHT',
-        'Ъ': 'A',
-        'Ь': '',
-        'Ю': 'YU',
-        'Я': 'YA',
-    }
+    "А": "A",
+    "Б": "B",
+    "В": "V",
+    "Г": "G",
+    "Д": "D",
+    "Е": "E",
+    "Ж": "ZH",
+    "З": "Z",
+    "И": "I",
+    "Й": "Y",
+    "К": "K",
+    "Л": "L",
+    "М": "M",
+    "Н": "N",
+    "О": "O",
+    "П": "P",
+    "Р": "R",
+    "С": "S",
+    "Т": "T",
+    "У": "U",
+    "Ф": "F",
+    "Х": "H",
+    "Ц": "TS",
+    "Ч": "CH",
+    "Ш": "SH",
+    "Щ": "SHT",
+    "Ъ": "A",
+    "Ь": "",
+    "Ю": "YU",
+    "Я": "YA",
+}
 
 
+# pylint: disable=too-many-instance-attributes
 @dataclasses.dataclass
 class RepeaterData:
+    """Repeater data."""
 
     name: str
     subname: str
@@ -67,6 +80,7 @@ class RepeaterData:
 
 
 def dstar_freq_suffix(freq: float) -> str:
+    "Return a D-STAR suffix letter appropriate for the frequency." ""
     if 1240 <= freq <= 1300:
         return "A"
     if 430 <= freq <= 440:
@@ -75,18 +89,23 @@ def dstar_freq_suffix(freq: float) -> str:
         return "C"
     raise ValueError(f"Unknown frequency {freq}")
 
+
 def dstar_callsign(callsign: str, suffix: str) -> str:
+    """Format a callsign in the D-STAR format with a suffix letter."""
     assert len(suffix) == 1
     if len(callsign) > 8:
         raise RuntimeError(f"{callsign=} too long")
     if len(callsign) == 8:
         return callsign
-    padding = ' '*(8 - len(callsign) - 1)
+    padding = " " * (8 - len(callsign) - 1)
     return f"{callsign}{padding}{suffix}"
 
+
 def transliterate(text: str) -> str:
-    text = re.sub(r'ИЯ', 'IA', text.upper())
-    return ''.join(BG_LAT_MAP.get(char, char) for char in text)
+    """Transliterate cyrillic text to the latin alphabet."""
+    text = re.sub(r"ИЯ", "IA", text.upper())
+    return "".join(BG_LAT_MAP.get(char, char) for char in text)
+
 
 def parse_json_repeaters(path: str) -> list[RepeaterData]:
     """Parse JSON repeater data into objects."""
@@ -111,19 +130,19 @@ def parse_json_repeaters(path: str) -> list[RepeaterData]:
         output.append(
             RepeaterData(
                 name=name,
-                subname=transliterate(data['loc']),
+                subname=transliterate(data["loc"]),
                 callsign=callsign,
                 gw_callsign=gw_callsign,
                 rx_freq=data["rx"],
-                shift_dir="DUP-" if data["rx"] >  data["tx"] else "DUP+",
+                shift_dir="DUP-" if data["rx"] > data["tx"] else "DUP+",
                 shift_freq=abs(data["tx"] - data["rx"]),
                 mode=mode,
                 tone_use="TSQL" if tone_freq else "OFF",
                 tone_freq=tone_freq,
                 rpt1use="YES" if "dstar" in rep_modes else "NO",
                 location="Approximate",
-                latitude=data['lat'],
-                longitude=data['lon'],
+                latitude=data["lat"],
+                longitude=data["lon"],
                 utc_offset="+3:00",
             )
         )
@@ -131,18 +150,20 @@ def parse_json_repeaters(path: str) -> list[RepeaterData]:
 
 
 def main():
+    """Glue."""
     repeaters = sorted(
-        parse_json_repeaters("reps.json"),
-        key=lambda repeater: repeater.name
+        parse_json_repeaters("reps.json"), key=lambda repeater: repeater.name
     )
 
     print(CSV_HEADER)
     for rep in repeaters:
         print(
-            f"1,LZ,{rep.name},{rep.subname},{rep.callsign},{rep.gw_callsign},{rep.rx_freq},"
-            f"{rep.shift_dir},{rep.shift_freq:.6f},{rep.mode},{rep.tone_use},{rep.tone_freq},"
-            f"{rep.rpt1use},Approximate,{rep.latitude},{rep.longitude},+3:00"
+            f"1,LZ,{rep.name},{rep.subname},{rep.callsign},{rep.gw_callsign},"
+            f"{rep.rx_freq},{rep.shift_dir},{rep.shift_freq:.6f},{rep.mode},"
+            f"{rep.tone_use},{rep.tone_freq},{rep.rpt1use},Approximate,"
+            f"{rep.latitude},{rep.longitude},+3:00"
         )
+
 
 if __name__ == "__main__":
     main()
